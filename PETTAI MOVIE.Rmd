@@ -1,0 +1,150 @@
+---
+title: "KaatruVeliyidaiTweets"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(httr)
+library(httpuv)
+library(rtweet)
+library(openssl)
+library(twitteR)
+
+api_key <- "PNw6f9aLA5XzGs1iXF4AZ228j"
+api_secret <- "FNYIZCymVcJCcofnUe79pijaQt6sPLsAqSPZ7lptsReQkvYy0P"
+token <- "805622911180472320-jaDtXR8a5U8R3to5xrwGnPpKilfCfcm"
+token_secret <- "dro6xGi2HOCsxBpaeLQsHVid47oHNw53h4DPxbvptODhB"
+
+options(httr_oauth_cache = T)
+httr:::use_cache()
+
+oauth_endpoints("twitter")
+myapp <- oauth_app("twitter",key = api_key, secret = api_secret)
+
+options(httr_oauth_cache = T)
+#twitter_token <- oauth1.0_token(oauth_endpoints("twitter"),myapp)
+twitter_token <- create_token(app="Personal.analysis",api_key,api_secret,token,token_secret)
+
+
+req <- GET("https://api.twitter.com/1.1/statuses/home_timeline.json",
+           config(token = twitter_token))
+stop_for_status(req)
+
+setup_twitter_oauth(api_key, api_secret,token,token_secret)
+```
+
+
+## R Markdown
+```{r warning=FALSE}
+
+query <- "pettai,#pettai,#pettaparak"
+query <- unlist(strsplit(query,","))
+tweets <- list()
+for(i in 1:length(query)){
+  result <- searchTwitter(query[i],n=10000,lang="en",since="2018-12-01")
+  tweets <- c(tweets,result)
+  tweets <- unique(tweets)
+}
+
+
+```
+
+```{r WARNING=FALSE}
+tweets.df <- twListToDF(tweets)
+View(tweets.df)
+library(stringr)
+library(readr)
+library(wordcloud)
+library(tm)
+library(SnowballC)
+library(RSentiment)
+library(DT)
+library(plyr)
+r1 = as.character(tweets.df$text)
+r1
+```
+```{r warning=FALSE}
+####### Method 1 ###########
+###### Data pre-processing
+set.seed(100)
+sample = sample(r1,length(r1))
+corpus = Corpus(VectorSource(list(sample)))
+corpus = tm_map(corpus,removePunctuation)
+corpus = tm_map(corpus,content_transformer(tolower))
+corpus = tm_map(corpus,removeNumbers)
+corpus = tm_map(corpus,stripWhitespace)
+corpus = tm_map(corpus,removeWords,stopwords(kind = "en"))
+corpus = tm_map(corpus,stemDocument)
+dtm_mp = DocumentTermMatrix(VCorpus(VectorSource(corpus[[1]]$content)))
+freq_up <- colSums(as.matrix(dtm_mp))
+
+##### Calculating sentiments
+sentiments_up = calculate_sentiment(names(freq_up))
+sentiments_up = cbind(sentiments_up,as.data.frame(freq_up))
+sent_pos_up = sentiments_up[sentiments_up$sentiment == "Positive",]
+sent_neg_up = sentiments_up[sentiments_up$sentiment == "Negative",]
+cat("We have negative sentiments :",sum(sent_neg_up$freq_up) , 
+    " & positive:" , sum(sent_pos_up$freq_up))
+
+layout(matrix(c(1,2),nrow=2),heights = c(1,4))
+par(mar=rep(0,4))
+plot.new()
+set.seed(100)
+wordcloud(sent_pos_up$text,sent_pos_up$freq_up,min.freq = 1,colors = brewer.pal
+          (6,"Dark2"))
+```
+```{r}
+########### Method 2 ##############
+library(ggplot2)
+library(syuzhet)
+some_txt <- gsub("RT|via)((?:\\b\\w*@\\w+)+)","",r1)
+some_txt <- gsub("http[^[:blank:]]+","",some_txt)
+some_txt <- gsub("@\\w+","",some_txt)
+some_txt <- gsub("[[:punct:]]"," ",some_txt)
+some_txt <- gsub("[^[:alnum:]]"," ",some_txt)
+View(some_txt)
+mysentiment <- get_nrc_sentiment(some_txt)
+mysentiment.positive = sum(mysentiment)
+mysentiment.anger = sum(mysentiment$anger)
+mysentiment.anticipation = sum(mysentiment$anticipation)
+mysentiment.disgust = sum(mysentiment$disgust)
+mysentiment.fear = sum(mysentiment$fear)
+mysentiment.joy = sum(mysentiment$joy)
+mysentiment.sadness = sum(mysentiment$sadness)
+mysentiment.surprise = sum(mysentiment$surprise)
+mysentiment.trust = sum(mysentiment$trust)
+mysentiment.negative = sum(mysentiment$negative)
+
+yaxis <- c(mysentiment.positive,mysentiment.anger,mysentiment.anticipation,
+           mysentiment.disgust,mysentiment.fear,mysentiment.joy,mysentiment.sadness,
+           mysentiment.surprise,mysentiment.trust,mysentiment.negative)
+
+xaxis <- c("Positive","Anger","Anticipation","Disgust","Fear","Joy","Sadness","Surprise",
+           "Trust","Negative")
+colors <- c("green","red","blue","orange","red","green","orange","blue","green","red")
+yrange <- range(0,yaxis)
+barplot(yaxis,names.arg = xaxis,xlab = "Emotional valence",ylab = "Score",
+        main = "Twitter sentiment for Pettai",sub = "Dec",col = colors,border = "black",
+        ylim = yrange,xpd = FALSE,axisnames = TRUE,cex.axis = 0.8,cex.sub = 0.8,col.sub = "blue")
+colSums(mysentiment)
+
+
+```
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
